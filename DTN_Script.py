@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import csv
 
-''' Access Variables '''
 
+''' Access Variables '''
 CLIENT_ID = '7a71f6ff-14d4-4e3a-8dbf-0e23a573f519' # this can be obtained from Apps and Services -> Projects -> Client ID
 destination_endpoint_id = "9c8c88c2-ea4a-11e6-b9ba-22000b9a448b" 
 source_endpoint_id_list = ["ff3045ea-a112-11ea-8f07-0a21f750d19b"]
@@ -12,7 +12,6 @@ source_dirs = "/globus/datasets/ds01/"
 dest_dir = "/data/user/mmoo97/TEST_TRANSFER/"
 
 ''' Code to get access token'''
-
 client = globus_sdk.NativeAppAuthClient(CLIENT_ID)
 client.oauth2_start_flow(refresh_tokens=True)
 
@@ -33,10 +32,8 @@ transfer_rt = globus_transfer_data['refresh_token']
 transfer_at = globus_transfer_data['access_token']
 expires_at_s = globus_transfer_data['expires_at_seconds']
 
-
 # Now we've got the data we need, but what do we do?
 # That "GlobusAuthorizer" from before is about to come to the rescue
-
 authorizer = globus_sdk.RefreshTokenAuthorizer(
     transfer_rt, client, access_token=transfer_at, expires_at=expires_at_s)
 
@@ -46,14 +43,13 @@ tc = globus_sdk.TransferClient(authorizer=authorizer)
 print("My Endpoints:")
 for ep in tc.endpoint_search(filter_scope="recently-used"):
     print("[{}] {}".format(ep["id"], ep["display_name"]))
-    
-    
+
+
 for task in tc.task_list():
     print("Task({}): {} -> {}".format(
         task["task_id"], task["source_endpoint"],
         task["destination_endpoint"]))
   
-     
 tc.update_task
 tdata = globus_sdk.TransferData(tc, source_endpoint_id_list[0],
                                  destination_endpoint_id,
@@ -67,7 +63,6 @@ tdata.add_item(source_dirs, dest_dir,
                 recursive=True)
 transfer_result = tc.submit_transfer(tdata)
 print("task_id =", transfer_result["task_id"])
-
 
 # task = tc.get_task(transfer_result["task_id"])
 task = tc.get_task("750a002a-0901-11eb-abd6-0213fe609573")
@@ -115,7 +110,6 @@ with open('oncampus_data.csv','r') as csvfile:
         except IndexError:
             # blank text will have been caught here
             pass
-    
 
 num_rows = 0
 with open('offcampus_data.csv','r') as csvfile:
@@ -137,8 +131,6 @@ with open('offcampus_data.csv','r') as csvfile:
         except IndexError:
             # blank text will have been caught here
             pass
-
-
 
 x = np.arange(len(ds_names))  # the label locations
 width = 0.35  # the width of the bars
@@ -176,7 +168,6 @@ def autolabel(rects, num):
                     xytext=(0, 3),  # 3 points vertical offset
                     textcoords="offset points",
                     ha='center', va='bottom')
-
 
 autolabel(rects1, 0)
 autolabel(rects2, 0)
