@@ -19,74 +19,34 @@ src_to_offcampy = []
 offcampx_to_src = []
 offcampy_to_src= []
 
-num_rows = 0
-with open('oncampus_data.csv','r') as csvfile:
-    plots = csv.reader(csvfile, delimiter=',')
-    for row in plots:
-        try:
-            if (row[0][0] == "d") and (row[0][1] == 's'):
-                
-                if num_rows < 8: # distinguishes transfers from source to UAB.
-                    src_to_oncampx.append(ds_sizes.get(row[0]))
-                    src_to_oncampy.append(float(row[3]))
-                    
-                if num_rows >= 8: # distinguishes transfers from UAB to source.
-                    oncampx_to_src.append(ds_sizes.get(row[0]))
-                    oncampy_to_src.append(float(row[3]))
-            
-            num_rows += 1
-            
-        except IndexError:
-            # blank text will have been caught here
-            pass
 
-num_rows = 0
-with open('offcampus_data.csv','r') as csvfile:
-    plots = csv.reader(csvfile, delimiter=',')
-    for row in plots:
-        try:
-            if (row[0][0] == "d") and (row[0][1] == 's'):
-                
-                if num_rows < 8: # distinguishes transfers remote to local 
-                    src_to_offcampx.append(ds_sizes.get(row[0]))
-                    src_to_offcampy.append(float(row[3]))
-                    
-                if num_rows >= 8: # distinguishes transfers local to remote. 
-                    offcampx_to_src.append(ds_sizes.get(row[0]))
-                    offcampy_to_src.append(float(row[3]))
-            
-            num_rows += 1
-            
-        except IndexError:
-            # blank text will have been caught here
-            pass
+def parse_dtn_data(filename, x_in, x_out, y_in, y_out):
+    """
+    filename: string
+    x_axis: string[]
+    y_in, y_out: int[]
+    """
+    num_rows = 0
+    with open(filename,'r') as csvfile:
+        plots = csv.reader(csvfile, delimiter=',')
+        for row in plots:
+            try:
+                if (row[0][0] == "d") and (row[0][1] == 's'):
 
-x = np.arange(len(ds_names))  # the label locations
-width = 0.35  # the width of the bars
+                    if num_rows < 8: # distinguishes transfers from source to UAB.
+                        x_in.append(ds_sizes.get(row[0]))
+                        y_in.append(float(row[3]))
 
-fig, ax = plt.subplots(2, 1)
-fig.set_figheight(7)
-fig.set_figwidth(9)
+                    if num_rows >= 8: # distinguishes transfers from UAB to source.
+                        x_out.append(ds_sizes.get(row[0]))
+                        y_out.append(float(row[3]))
 
-rects1 = ax[0].bar(x - width/2, src_to_oncampy, width, label='Source > OnCampus')
-rects2 = ax[0].bar(x + width/2, oncampy_to_src, width, label='OnCampus > Source')
+                num_rows += 1
 
-rects3 = ax[1].bar(x - width/2, src_to_offcampy, width, label='Source > OffCampus')
-rects4 = ax[1].bar(x + width/2, offcampy_to_src, width, label='OffCampus > Source')
+            except IndexError:
+                # blank text will have been caught here
+                pass
 
-
-# Add some text for labels, title and custom x-axis tick labels, etc.
-ax[0].set_ylabel('Speed (MB/s)')
-ax[0].set_title('DTN Comparison to and from OnCampus Endpoint')
-ax[0].set_xticks(x)
-ax[0].set_xticklabels(ds_names)
-ax[0].legend()
-
-ax[1].set_ylabel('Speed (MB/s)')
-ax[1].set_title('DTN Comparison to and from OffCampus Endpoint')
-ax[1].set_xticks(x)
-ax[1].set_xticklabels(ds_names)
-ax[1].legend()
 
 def autolabel(rects, num):
     """Attach a text label above each bar in *rects*, displaying its height."""
@@ -98,12 +58,46 @@ def autolabel(rects, num):
                     textcoords="offset points",
                     ha='center', va='bottom')
 
-autolabel(rects1, 0)
-autolabel(rects2, 0)
 
-autolabel(rects3, 1)
-autolabel(rects4, 1)
+x = np.arange(len(ds_names))  # the label locations
+width = 0.35  # the width of the bars
 
-fig.tight_layout()
+fig, ax = plt.subplots(2, 1)
+fig.set_figheight(7)
+fig.set_figwidth(9)
 
-plt.show() 
+
+def build_graph(num, endpoint, campus, data1, data2):
+
+    rects1 = ax[num].bar(x - width / 2, data1, width, label='{} > {}'.format(endpoint, campus))
+    rects2 = ax[num].bar(x + width / 2, data2, width, label='{} > {}'.format(campus, endpoint))
+
+    # Add some text for labels, title and custom x-axis tick labels, etc.
+    ax[num].set_ylabel('Speed (MB/s)')
+    ax[num].set_title('DTN Comparison to and from {} Endpoint'.format(campus))
+    ax[num].set_xticks(x)
+    ax[num].set_xticklabels(ds_names)
+    ax[num].legend()
+
+    autolabel(rects1, num)
+    autolabel(rects2, num)
+
+
+def show_graphs():
+
+    build_graph(0, "cac_dtn_test", "OnCampus", src_to_oncampy, oncampy_to_src)
+    build_graph(1, "cac_dtn_test", "OffCampus", src_to_offcampy, offcampy_to_src)
+
+    fig.tight_layout()
+
+    plt.show()
+
+
+def main():
+    parse_dtn_data("oncampus_data.csv", src_to_oncampx, oncampx_to_src, src_to_oncampy, oncampy_to_src)
+    parse_dtn_data("offcampus_data.csv", src_to_offcampx, offcampx_to_src, src_to_offcampy, offcampy_to_src)
+    show_graphs()
+
+
+if __name__ == "__main__":
+    main()
