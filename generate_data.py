@@ -98,14 +98,8 @@ if __name__ == '__main__':
                                 refresh_token=args.refresh_token)
     tc = globus_sdk.TransferClient(authorizer=authorizer)
 
-    # transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir)
-    data_sets = [1, 4, 6, 8, 10, 12, 14, 16]
-    for set in data_sets:
-        set = str(set)
-        if len(set) < 2:
-            set = '0' + set
-        transfer_data(tc, args.src_ep_id, args.dest_ep_id, '/datasets/ds{}'.format(set),
-                      '/data/user/mmoo97/TEST_TRANSFER/ds{}'.format(set))
+    transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir)
+
 
     # print("My Endpoints:")
     # for ep in tc.endpoint_search(filter_scope="recently-used"):
