@@ -2,6 +2,7 @@ import globus_sdk
 import sys
 import argparse
 from time import sleep
+import progressbar
 
 
 def get_args():
@@ -11,36 +12,51 @@ def get_args():
     parser.add_argument('dest_ep_id', type=str, help='The Endpoint ID of the destination endpoint.')
     parser.add_argument('src_dir', type=str, help='The desired directory from the source endpoint.')
     parser.add_argument('dest_dir', type=str, help='The desired directory from the destination endpoint.')
+    parser.add_argument('-r, --refresh-token', dest='refresh_token', type=str,
+                        help='The resource token for Globus Authentication.')
 
     return parser.parse_args()
 
 
-def get_token(client_id):
-    ''' Code to gt access token'''
+def get_authorizer(client_id, **kwargs):
+    """Code to gt access token"""
     client = globus_sdk.NativeAppAuthClient(client_id)
-    client.oauth2_start_flow(refresh_tokens=True)
+    refresh_token = kwargs.get('refresh_token')
+    token_response = None
 
-    print('Please go to this URL and login: {0}'
-          .format(client.oauth2_get_authorize_url()))
+    if refresh_token is None:
+        client.oauth2_start_flow(refresh_tokens=True)
 
-    get_input = getattr(__builtins__, 'raw_input', input)
-    auth_code = get_input('Please enter the code here: ').strip()
-    token_response = client.oauth2_exchange_code_for_tokens(auth_code)
+        print('Please go to this URL and login: {0}'
+              .format(client.oauth2_get_authorize_url()))
 
-    globus_auth_data = token_response.by_resource_server['auth.globus.org']
+        get_input = getattr(__builtins__, 'raw_input', input)
+        auth_code = get_input('Please enter the code here: ').strip()
+        token_response = client.oauth2_exchange_code_for_tokens(auth_code)
+        print(str(token_response) + "\n")
 
-    globus_transfer_data = token_response.by_resource_server['transfer.api.globus.org']
+        globus_auth_data = token_response.by_resource_server['auth.globus.org']
+        globus_transfer_data = token_response.by_resource_server['transfer.api.globus.org']
 
-    # the refresh token and access token, often abbr. as RT and AT
-    transfer_rt = globus_transfer_data['refresh_token']
-    transfer_at = globus_transfer_data['access_token']
-    expires_at_s = globus_transfer_data['expires_at_seconds']
+        transfer_token = globus_transfer_data['access_token']
+        print("\nTo avoid browser-based token authentication in the future, consider"
+              " using the refresh token below by invoking the [-r] flag upon program initiation.")
+        print("\tRefresh token:\t" + globus_transfer_data['refresh_token'] + "\n")
 
-    # Now we've got the data we need, but what do we do?
-    # That "GlobusAuthorizer" from before is about to come to the rescue
+        return globus_sdk.AccessTokenAuthorizer(transfer_token)
 
-    return globus_sdk.RefreshTokenAuthorizer(
-        transfer_rt, client, access_token=transfer_at, expires_at=expires_at_s)
+    else:
+        client.oauth2_start_flow(refresh_tokens=True)
+        token_response = client.oauth2_refresh_token(refresh_token)
+        globus_transfer_data = token_response.by_resource_server['transfer.api.globus.org']
+
+        # the refresh token and access token, often abbr. as RT and AT
+        transfer_rt = globus_transfer_data['refresh_token']
+        transfer_at = globus_transfer_data['access_token']
+        expires_at_s = globus_transfer_data['expires_at_seconds']
+
+        return globus_sdk.RefreshTokenAuthorizer(
+            transfer_rt, client, access_token=transfer_at, expires_at=expires_at_s)
 
 
 def transfer_data(tc, src_id, dest_id, src_dir, dest_dir):
@@ -54,31 +70,42 @@ def transfer_data(tc, src_id, dest_id, src_dir, dest_dir):
 
     transfer_result = tc.submit_transfer(tdata)
     print("task_id =", transfer_result["task_id"])
+    bar = progressbar.ProgressBar(max_value=progressbar.UnknownLength)
 
-    task = tc.get_task(transfer_result["task_id"])
     while True:
+        task = tc.get_task(transfer_result["task_id"])
+
         if task["status"] == "SUCCEEDED":
+            bar.finish()
             print("Task Status: " + task["status"])
             print("Effective Speed: " + str(round(task["effective_bytes_per_second"]/(1024*1024), 2)) + " MB/s")
+            # TODO: return values and include option to mute output
             break
+
+        elif task["status"] == "ACTIVE":
+            bar.update(round(task["bytes_transferred"]/1000000, 2), )
+            sleep(.5)
+
         else:
-
-            # sys.stdout.write("\rDoing thing %i" % i)
-            # sys.stdout.flush()
-            sys.stdout.write("\rTask Status: %s\n" % task["status"])
-            sys.stdout.write("\rMB Transferred: %s MB\n" % str(round(task["bytes_transferred"]/1000000, 2)))
-            sys.stdout.flush()
-            sleep(3)
-
-
+            bar.finish()
+            print("\rTask Status: %s\n" % task["status"])
+            exit(-1)
 
 
 if __name__ == '__main__':
     args = get_args()
-    authorizer = get_token(args.client)
+    authorizer = get_authorizer(args.client,
+                                refresh_token=args.refresh_token)
     tc = globus_sdk.TransferClient(authorizer=authorizer)
 
-    transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir)
+    # transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir)
+    data_sets = [1, 4, 6, 8, 10, 12, 14, 16]
+    for set in data_sets:
+        set = str(set)
+        if len(set) < 2:
+            set = '0' + set
+        transfer_data(tc, args.src_ep_id, args.dest_ep_id, '/datasets/ds{}'.format(set),
+                      '/data/user/mmoo97/TEST_TRANSFER/ds{}'.format(set))
 
     # print("My Endpoints:")
     # for ep in tc.endpoint_search(filter_scope="recently-used"):
