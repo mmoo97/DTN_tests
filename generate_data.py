@@ -3,6 +3,7 @@ import sys
 import argparse
 from time import sleep
 import progressbar
+import csv
 
 
 def get_args():
@@ -89,7 +90,8 @@ def transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
                     # Todo: Make it so that the elapsed time can be created outside of the progress bar context.
                     "elapsed": str(bar.data()['time_elapsed']),
                     "speed": str(round(task["effective_bytes_per_second"]/(1024*1024), 2)),
-                    "src_ep_id": src_id, "dest_ep_id": dest_id,
+                    "src_ep_id": src_id,
+                    "dest_ep_id": dest_id,
                     "task_id": transfer_result["task_id"]}
 
         elif task["status"] == "ACTIVE":
@@ -105,8 +107,25 @@ def transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
             exit(-1)
 
 
-def write_results():
-    pass
+def write_results(data_dict, filename):
+    with open(filename, 'r+', newline='') as file:
+        writer = csv.writer(file)
+        count = 0
+        read = csv.reader(file, delimiter=",")
+        for line in read:
+            count += 1
+
+        if count == 0:
+            writer.writerow(["Dataset", "Start", "End", "Elapsed", "Speed", "Source EP ID", "Dest. EP ID", "Task ID"])
+
+        writer.writerow([data_dict["dataset"],
+                    data_dict["start"],
+                    data_dict["end"],
+                    data_dict["elapsed"],
+                    data_dict["speed"],
+                    data_dict["src_ep_id"],
+                    data_dict["dest_ep_id"],
+                    data_dict["task_id"]])
 
 
 if __name__ == '__main__':
