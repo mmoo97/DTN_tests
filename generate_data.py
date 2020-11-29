@@ -135,4 +135,13 @@ if __name__ == '__main__':
     tc = globus_sdk.TransferClient(authorizer=authorizer)
 
     # Todo: Make it so that the elapsed time can be created outside of the progress bar context.
-    print(transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True))
+    # print(transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True))
+
+    # transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir)
+    data_sets = [1, 4, 6, 8, 10, 12, 14, 16]
+    for set in data_sets:
+        set = str(set)
+        if len(set) < 2:
+            set = '0' + set
+        write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, '/datasets/ds{}'.format(set),
+                      '/data/user/mmoo97/TEST_TRANSFER/ds{}'.format(set), True), "test.csv")
