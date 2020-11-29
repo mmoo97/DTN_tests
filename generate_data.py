@@ -59,7 +59,7 @@ def get_authorizer(client_id, **kwargs):
             transfer_rt, client, access_token=transfer_at, expires_at=expires_at_s)
 
 
-def transfer_data(tc, src_id, dest_id, src_dir, dest_dir):
+def transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
 
     tdata = globus_sdk.TransferData(tc, src_id,
                                      dest_id,
@@ -69,27 +69,44 @@ def transfer_data(tc, src_id, dest_id, src_dir, dest_dir):
     tdata.add_item(src_dir, dest_dir, recursive=True)
 
     transfer_result = tc.submit_transfer(tdata)
-    print("task_id =", transfer_result["task_id"])
     bar = progressbar.ProgressBar(max_value=progressbar.UnknownLength)
+
+    if output:
+        print("\ntask_id =", transfer_result["task_id"])
 
     while True:
         task = tc.get_task(transfer_result["task_id"])
 
         if task["status"] == "SUCCEEDED":
-            bar.finish()
-            print("Task Status: " + task["status"])
-            print("Effective Speed: " + str(round(task["effective_bytes_per_second"]/(1024*1024), 2)) + " MB/s")
-            # TODO: return values and include option to mute output
-            break
+            if output:
+                bar.finish()
+                print("Task Status: " + task["status"])
+                print("Effective Speed: " + str(round(task["effective_bytes_per_second"]/(1024*1024), 2)) + " MB/s")
+
+            return {"dataset": src_dir.split("/")[-1],
+                    "start": task["request_time"],
+                    "end": task["completion_time"],
+                    # Todo: Make it so that the elapsed time can be created outside of the progress bar context.
+                    "elapsed": str(bar.data()['time_elapsed']),
+                    "speed": str(round(task["effective_bytes_per_second"]/(1024*1024), 2)),
+                    "src_ep_id": src_id, "dest_ep_id": dest_id,
+                    "task_id": transfer_result["task_id"]}
 
         elif task["status"] == "ACTIVE":
-            bar.update(round(task["bytes_transferred"]/1000000, 2), )
-            sleep(.5)
+            if output:
+                # Todo: Add 'MB' to the end of progress bar output
+                bar.update(round(task["bytes_transferred"]/1000000, 2))
+                sleep(.5)
 
         else:
-            bar.finish()
-            print("\rTask Status: %s\n" % task["status"])
+            if output:
+                bar.finish()
+                print("\rTask Status: %s\n" % task["status"])
             exit(-1)
+
+
+def write_results():
+    pass
 
 
 if __name__ == '__main__':
@@ -98,16 +115,5 @@ if __name__ == '__main__':
                                 refresh_token=args.refresh_token)
     tc = globus_sdk.TransferClient(authorizer=authorizer)
 
-    transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir)
-
-
-    # print("My Endpoints:")
-    # for ep in tc.endpoint_search(filter_scope="recently-used"):
-    #     print("[{}] {}".format(ep["id"], ep["display_name"]))
-    #
-    # print("\n")
-    # for task in tc.task_list():
-    #     print("Task({}): {} -> {}".format(
-    #         task["task_id"], task["source_endpoint"],
-    #         task["destination_endpoint"]))
-
+    # Todo: Make it so that the elapsed time can be created outside of the progress bar context.
+    print(transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True))
