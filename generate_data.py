@@ -4,6 +4,7 @@ import argparse
 from time import sleep
 import progressbar
 import csv
+from datetime import datetime
 
 
 def get_args():
@@ -34,7 +35,6 @@ def get_authorizer(client_id, **kwargs):
         get_input = getattr(__builtins__, 'raw_input', input)
         auth_code = get_input('Please enter the code here: ').strip()
         token_response = client.oauth2_exchange_code_for_tokens(auth_code)
-        print(str(token_response) + "\n")
 
         globus_auth_data = token_response.by_resource_server['auth.globus.org']
         globus_transfer_data = token_response.by_resource_server['transfer.api.globus.org']
@@ -64,7 +64,7 @@ def transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
 
     tdata = globus_sdk.TransferData(tc, src_id,
                                      dest_id,
-                                     label="Dataset Test",
+                                     label="{}".format(src_dir.split("/")[-1]),
                                     sync_level=None, verify="checksum")
 
     tdata.add_item(src_dir, dest_dir, recursive=True)
@@ -108,14 +108,12 @@ def transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
 
 
 def write_results(data_dict, filename):
-    with open(filename, 'r+', newline='') as file:
+    with open(filename, 'a+', newline='') as file:
         writer = csv.writer(file)
         count = 0
         read = csv.reader(file, delimiter=",")
-        for line in read:
-            count += 1
 
-        if count == 0:
+        if file.tell() == 0:
             writer.writerow(["Dataset", "Start", "End", "Elapsed", "Speed", "Source EP ID", "Dest. EP ID", "Task ID"])
 
         writer.writerow([data_dict["dataset"],
@@ -137,11 +135,21 @@ if __name__ == '__main__':
     # Todo: Make it so that the elapsed time can be created outside of the progress bar context.
     # print(transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True))
 
-    # transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir)
+    # write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True), "test.csv")
+
     data_sets = [1, 4, 6, 8, 10, 12, 14, 16]
+    test_start = datetime.now().strftime("%m-%d-%Y_%Hh%Mm%Ss")
     for set in data_sets:
         set = str(set)
         if len(set) < 2:
             set = '0' + set
         write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, '/datasets/ds{}'.format(set),
-                      '/data/user/mmoo97/TEST_TRANSFER/ds{}'.format(set), True), "test.csv")
+                      '/scratch/mmoo97/TEST_TRANSFER/ds{}'.format(set), True), "{}.csv".format(test_start))
+
+    for set in data_sets:
+        set = str(set)
+        if len(set) < 2:
+            set = '0' + set
+        write_results(transfer_data(tc, args.dest_ep_id, args.src_ep_id,
+                                    '/scratch/mmoo97/TEST_TRANSFER/ds{}'.format(set), '/perftest/uab_rc/ds{}'.format(set),
+                                    True), "{}.csv".format(test_start))
