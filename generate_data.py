@@ -110,8 +110,6 @@ def transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
 def write_results(data_dict, filename):
     with open(filename, 'a+', newline='') as file:
         writer = csv.writer(file)
-        count = 0
-        read = csv.reader(file, delimiter=",")
 
         if file.tell() == 0:
             writer.writerow(["Dataset", "Start", "End", "Elapsed", "Speed", "Source EP ID", "Dest. EP ID", "Task ID"])
@@ -137,19 +135,14 @@ if __name__ == '__main__':
 
     # write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True), "test.csv")
 
-    data_sets = [1, 4, 6, 8, 10, 12, 14, 16]
+    data_sets = ["01", "04", "06", "08", "10", "12", "14", "16"]
     test_start = datetime.now().strftime("%m-%d-%Y_%Hh%Mm%Ss")
+
     for set in data_sets:
-        set = str(set)
-        if len(set) < 2:
-            set = '0' + set
         write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, '/datasets/ds{}'.format(set),
                       '/scratch/mmoo97/TEST_TRANSFER/ds{}'.format(set), True), "{}.csv".format(test_start))
 
     for set in data_sets:
-        set = str(set)
-        if len(set) < 2:
-            set = '0' + set
         write_results(transfer_data(tc, args.dest_ep_id, args.src_ep_id,
                                     '/scratch/mmoo97/TEST_TRANSFER/ds{}'.format(set), '/perftest/uab_rc/ds{}'.format(set),
                                     True), "{}.csv".format(test_start))
