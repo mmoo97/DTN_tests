@@ -14,13 +14,15 @@ def get_args():
     parser.add_argument('dest_ep_id', type=str, help='The Endpoint ID of the destination endpoint.')
     parser.add_argument('src_dir', type=str, help='The desired directory from the source endpoint.')
     parser.add_argument('dest_dir', type=str, help='The desired directory from the destination endpoint.')
-    parser.add_argument('-t, --refresh-token', dest='refresh token', type=str,
+    parser.add_argument('-t, --refresh-token', dest='refresh_token', type=str,
                         help='The resource token for Globus Authentication.')
-    parser.add_argument('-r', dest='Return Directory', type=str,
+    parser.add_argument('-r', dest='return_directory', type=str,
                         help='The directory to write to if destination write is specified')
-    parser.add_argument('-w', dest='Write back', action='store_true',
-                        help='Write data written to the destination directory back to the source directory.')
-    parser.add_argument('-c', dest='clean', action='store_true', help='Use to delete/clean the transferred files post transfer.')
+    parser.add_argument('-w', dest='write_back', action='store_true',
+                        help='Write data written to the destination directory back to the source directory or the '
+                             'specified return directory using [-r].')
+    parser.add_argument('-c', dest='clean', action='store_true',
+                        help='Use to delete/clean the transferred files post transfer.')
 
     return parser.parse_args()
 
@@ -69,7 +71,7 @@ def transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
 
     tdata = globus_sdk.TransferData(tc, src_id,
                                      dest_id,
-                                     label="{}".format(src_dir.split("/")[-1]),
+                                     label="Add {}".format(src_dir.split("/")[-1]),
                                     sync_level=None, verify="checksum")
 
     tdata.add_item(src_dir, dest_dir, recursive=True)
@@ -136,12 +138,17 @@ if __name__ == '__main__':
     tc = globus_sdk.TransferClient(authorizer=authorizer)
 
     # Todo: Make it so that the elapsed time can be created outside of the progress bar context.
-    # print(transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True))
-
-    # write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True), "test.csv")
 
     data_sets = ["01", "04", "06", "08", "10", "12", "14", "16"]
     test_start = datetime.now().strftime("%m-%d-%Y_%Hh%Mm%Ss")
+
+    write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True),
+                  "{}.csv".format(test_start))
+    if args.write_back:
+        wdir = args.return_directory or args.src_dir
+        write_results(transfer_data(tc, args.dest_ep_id, args.src_ep_id, args.dest_dir, wdir, True),
+                      "{}.csv".format(test_start))
+        print("Write Back: " + wdir)
 
     # for set in data_sets:
     #     write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, '/datasets/ds{}'.format(set),
@@ -153,6 +160,15 @@ if __name__ == '__main__':
     #                                 True), "{}.csv".format(test_start))
 
     if args.clean:
-        ddata = globus_sdk.DeleteData(tc, args.dest_ep_id, recursive=True)
-        ddata.add_item(args.dest_dir)
+        ddata = globus_sdk.DeleteData(tc, args.dest_ep_id, recursive=True,
+                                      label="Delete {}".format(args.dest_dir.split("/")[-1]))
 
+        ddata.add_item(args.dest_dir)
+        tc.submit_delete(ddata)
+
+        if args.write_back:
+            ddir = args.return_directory or args.src_dir
+            ddata2 = globus_sdk.DeleteData(tc, args.src_ep_id, recursive=True,
+                                          label="Delete {}".format(args.src_dir.split("/")[-1]))
+            ddata2.add_item(ddir)
+            tc.submit_delete(ddata2)
