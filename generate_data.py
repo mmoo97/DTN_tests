@@ -14,8 +14,13 @@ def get_args():
     parser.add_argument('dest_ep_id', type=str, help='The Endpoint ID of the destination endpoint.')
     parser.add_argument('src_dir', type=str, help='The desired directory from the source endpoint.')
     parser.add_argument('dest_dir', type=str, help='The desired directory from the destination endpoint.')
-    parser.add_argument('-r, --refresh-token', dest='refresh_token', type=str,
+    parser.add_argument('-t, --refresh-token', dest='refresh token', type=str,
                         help='The resource token for Globus Authentication.')
+    parser.add_argument('-r', dest='Return Directory', type=str,
+                        help='The directory to write to if destination write is specified')
+    parser.add_argument('-w', dest='Write back', action='store_true',
+                        help='Write data written to the destination directory back to the source directory.')
+    parser.add_argument('-c', dest='clean', action='store_true', help='Use to delete/clean the transferred files post transfer.')
 
     return parser.parse_args()
 
@@ -138,11 +143,16 @@ if __name__ == '__main__':
     data_sets = ["01", "04", "06", "08", "10", "12", "14", "16"]
     test_start = datetime.now().strftime("%m-%d-%Y_%Hh%Mm%Ss")
 
-    for set in data_sets:
-        write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, '/datasets/ds{}'.format(set),
-                      '/scratch/mmoo97/TEST_TRANSFER/ds{}'.format(set), True), "{}.csv".format(test_start))
+    # for set in data_sets:
+    #     write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, '/datasets/ds{}'.format(set),
+    #                   '/scratch/mmoo97/TEST_TRANSFER/ds{}'.format(set), True), "{}.csv".format(test_start))
+    #
+    # for set in data_sets:
+    #     write_results(transfer_data(tc, args.dest_ep_id, args.src_ep_id,
+    #                                 '/scratch/mmoo97/TEST_TRANSFER/ds{}'.format(set), '/perftest/uab_rc/ds{}'.format(set),
+    #                                 True), "{}.csv".format(test_start))
 
-    for set in data_sets:
-        write_results(transfer_data(tc, args.dest_ep_id, args.src_ep_id,
-                                    '/scratch/mmoo97/TEST_TRANSFER/ds{}'.format(set), '/perftest/uab_rc/ds{}'.format(set),
-                                    True), "{}.csv".format(test_start))
+    if args.clean:
+        ddata = globus_sdk.DeleteData(tc, args.dest_ep_id, recursive=True)
+        ddata.add_item(args.dest_dir)
+
