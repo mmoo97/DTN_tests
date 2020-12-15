@@ -142,33 +142,33 @@ if __name__ == '__main__':
     data_sets = ["01", "04", "06", "08", "10", "12", "14", "16"]
     test_start = datetime.now().strftime("%m-%d-%Y_%Hh%Mm%Ss")
 
-    write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True),
-                  "{}.csv".format(test_start))
+    # write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True),
+    #               "{}.csv".format(test_start))
+    # if args.write_back:
+    #     wdir = args.return_directory or args.src_dir
+    #     write_results(transfer_data(tc, args.dest_ep_id, args.src_ep_id, args.dest_dir, wdir, True),
+    #                   "{}.csv".format(test_start))
+
+    for set in data_sets:
+        write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, '/datasets/ds{}'.format(set),
+                      '/rstore/share/TEST_TRANSFER/ds{}'.format(set), True), "{}.csv".format(test_start))
+
     if args.write_back:
-        wdir = args.return_directory or args.src_dir
-        write_results(transfer_data(tc, args.dest_ep_id, args.src_ep_id, args.dest_dir, wdir, True),
-                      "{}.csv".format(test_start))
-        print("Write Back: " + wdir)
+        for set in data_sets:
+            write_results(transfer_data(tc, args.dest_ep_id, args.src_ep_id,
+                                        '/rstore/share/TEST_TRANSFER/ds{}'.format(set), '/perftest/uab_rc/ds{}'.format(set),
+                                        True), "{}.csv".format(test_start))
 
-    # for set in data_sets:
-    #     write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, '/datasets/ds{}'.format(set),
-    #                   '/scratch/mmoo97/TEST_TRANSFER/ds{}'.format(set), True), "{}.csv".format(test_start))
+    # if args.clean:
+    #     ddata = globus_sdk.DeleteData(tc, args.dest_ep_id, recursive=True,
+    #                                   label="Delete {}".format(args.dest_dir.split("/")[-1]))
     #
-    # for set in data_sets:
-    #     write_results(transfer_data(tc, args.dest_ep_id, args.src_ep_id,
-    #                                 '/scratch/mmoo97/TEST_TRANSFER/ds{}'.format(set), '/perftest/uab_rc/ds{}'.format(set),
-    #                                 True), "{}.csv".format(test_start))
-
-    if args.clean:
-        ddata = globus_sdk.DeleteData(tc, args.dest_ep_id, recursive=True,
-                                      label="Delete {}".format(args.dest_dir.split("/")[-1]))
-
-        ddata.add_item(args.dest_dir)
-        tc.submit_delete(ddata)
-
-        if args.write_back:
-            ddir = args.return_directory or args.src_dir
-            ddata2 = globus_sdk.DeleteData(tc, args.src_ep_id, recursive=True,
-                                          label="Delete {}".format(args.src_dir.split("/")[-1]))
-            ddata2.add_item(ddir)
-            tc.submit_delete(ddata2)
+    #     ddata.add_item(args.dest_dir)
+    #     tc.submit_delete(ddata)
+    #
+    #     if args.write_back:
+    #         ddir = args.return_directory or args.src_dir
+    #         ddata2 = globus_sdk.DeleteData(tc, args.src_ep_id, recursive=True,
+    #                                       label="Delete {}".format(args.src_dir.split("/")[-1]))
+    #         ddata2.add_item(ddir)
+    #         tc.submit_delete(ddata2)
