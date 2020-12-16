@@ -115,7 +115,7 @@ def single_transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
             exit(-1)
 
 
-def multi_transfer(tc, src_id, dest_id, src_dir, dest_dir, output):
+def multi_transfer(tc, src_id, dest_id, src_dir, dest_dir, output, ret_dir):
     data_sets = ["01", "04", "06", "08", "10", "12", "14", "16"]
 
     if args.batch:
@@ -132,16 +132,18 @@ def multi_transfer(tc, src_id, dest_id, src_dir, dest_dir, output):
     else:
 
         for set in data_sets:
-            write_results(single_transfer_data(tc, args.src_ep_id, args.dest_ep_id, '/datasets/ds{}'.format(set),
-                                               '/rstore/share/TEST_TRANSFER/ds{}'.format(set), True),
+            write_results(single_transfer_data(tc, args.src_ep_id, args.dest_ep_id, src_dir + 'ds{}'.format(set),
+                                               dest_dir + 'ds{}'.format(set), output),
                           "{}.csv".format(test_start))
 
         if args.write_back:
+            if ret_dir is not None:
+                src_dir = ret_dir
             for set in data_sets:
                 write_results(single_transfer_data(tc, args.dest_ep_id, args.src_ep_id,
-                                                   '/rstore/share/TEST_TRANSFER/ds{}'.format(set),
-                                                   '/perftest/uab_rc/ds{}'.format(set),
-                                                   True), "{}.csv".format(test_start))
+                                                   dest_dir + 'ds{}'.format(set),
+                                                   src_dir + 'ds{}'.format(set),
+                                                   output), "{}.csv".format(test_start))
 
 
 def write_results(data_dict, filename):
@@ -186,12 +188,21 @@ if __name__ == '__main__':
                                 refresh_token=args.refresh_token)
     tc = globus_sdk.TransferClient(authorizer=authorizer)
 
-    # Todo: Make it so that the elapsed time can be created outside of the progress bar context.
-
     test_start = datetime.now().strftime("%m-%d-%Y_%Hh%Mm%Ss")
 
-    multi_transfer(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True)
+    off_campus = '7167cb38-9f78-11e6-b0dd-22000b92c261'
 
+    multi_transfer(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True, "/perftest/uab_rc/")
+    multi_transfer(tc, 'e261ffb8-6d04-11e5-ba46-22000b92c6ec', args.dest_ep_id, args.src_dir, args.dest_dir, True,
+                   "/perftest/uab_rc/")  # argonne
+    multi_transfer(tc, '924a32b0-6a2a-11e6-83a8-22000b97daec', args.dest_ep_id, '/globus/datasets/', args.dest_dir,
+                   True, '/globus/perftest/uab_rc/')  # pamela
+
+    multi_transfer(tc, args.src_ep_id, off_campus, args.src_dir, args.dest_dir, True, "/perftest/uab_rc/")
+    multi_transfer(tc, 'e261ffb8-6d04-11e5-ba46-22000b92c6ec', off_campus, args.src_dir, args.dest_dir, True,
+                   "/perftest/uab_rc/")  # argonne
+    multi_transfer(tc, '924a32b0-6a2a-11e6-83a8-22000b97daec', off_campus, '/globus/datasets/', args.dest_dir,
+                   True, '/globus/perftest/uab_rc/')  # pamela
     # write_results(single_transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True),
     #               "{}.csv".format(test_start))
     # if args.write_back:
