@@ -1,0 +1,3 @@
+[console_scripts]
+globus = globus_cli:main
+
