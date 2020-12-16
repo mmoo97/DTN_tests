@@ -1,8 +1,9 @@
 import globus_sdk
-import sys
 import argparse
 from time import sleep
 import progressbar
+import csv
+from datetime import datetime
 
 
 def get_args():
@@ -12,8 +13,17 @@ def get_args():
     parser.add_argument('dest_ep_id', type=str, help='The Endpoint ID of the destination endpoint.')
     parser.add_argument('src_dir', type=str, help='The desired directory from the source endpoint.')
     parser.add_argument('dest_dir', type=str, help='The desired directory from the destination endpoint.')
-    parser.add_argument('-r, --refresh-token', dest='refresh_token', type=str,
+    parser.add_argument('-t, --refresh-token', dest='refresh_token', type=str,
                         help='The resource token for Globus Authentication.')
+    parser.add_argument('-r', dest='return_directory', type=str,
+                        help='The directory to write to if destination write is specified')
+    parser.add_argument('-w', dest='write_back', action='store_true',
+                        help='Write data written to the destination directory back to the source directory or the '
+                             'specified return directory using [-r].')
+    parser.add_argument('-c', dest='clean', action='store_true',
+                        help='Use to delete/clean the transferred files post transfer.')
+    parser.add_argument('-b', dest='batch', action='store_true',
+                        help='Run all transfers at the same time rather than individually.')
 
     return parser.parse_args()
 
@@ -33,7 +43,6 @@ def get_authorizer(client_id, **kwargs):
         get_input = getattr(__builtins__, 'raw_input', input)
         auth_code = get_input('Please enter the code here: ').strip()
         token_response = client.oauth2_exchange_code_for_tokens(auth_code)
-        print(str(token_response) + "\n")
 
         globus_auth_data = token_response.by_resource_server['auth.globus.org']
         globus_transfer_data = token_response.by_resource_server['transfer.api.globus.org']
@@ -59,37 +68,114 @@ def get_authorizer(client_id, **kwargs):
             transfer_rt, client, access_token=transfer_at, expires_at=expires_at_s)
 
 
-def transfer_data(tc, src_id, dest_id, src_dir, dest_dir):
-
+def single_transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
     tdata = globus_sdk.TransferData(tc, src_id,
-                                     dest_id,
-                                     label="Dataset Test",
+                                    dest_id,
+                                    label="Add {}".format(src_dir.split("/")[-1]),
                                     sync_level=None, verify="checksum")
 
     tdata.add_item(src_dir, dest_dir, recursive=True)
 
     transfer_result = tc.submit_transfer(tdata)
-    print("task_id =", transfer_result["task_id"])
     bar = progressbar.ProgressBar(max_value=progressbar.UnknownLength)
+
+    if output:
+        print("\ntask_id =", transfer_result["task_id"])
 
     while True:
         task = tc.get_task(transfer_result["task_id"])
 
         if task["status"] == "SUCCEEDED":
-            bar.finish()
-            print("Task Status: " + task["status"])
-            print("Effective Speed: " + str(round(task["effective_bytes_per_second"]/(1024*1024), 2)) + " MB/s")
-            # TODO: return values and include option to mute output
-            break
+            if output:
+                bar.finish()
+                print("Task Status: " + task["status"])
+                print("Effective Speed: " + str(round(task["effective_bytes_per_second"] / (1024 * 1024), 2)) + " MB/s")
+
+            return {"dataset": src_dir.split("/")[-1],
+                    "start": task["request_time"],
+                    "end": task["completion_time"],
+                    "elapsed": str(bar.data()['time_elapsed']),
+                    "speed": str(round(task["effective_bytes_per_second"] / (1024 * 1024), 2)),
+                    "src_ep_id": src_id,
+                    "dest_ep_id": dest_id,
+                    "task_id": transfer_result["task_id"]}
 
         elif task["status"] == "ACTIVE":
-            bar.update(round(task["bytes_transferred"]/1000000, 2), )
-            sleep(.5)
+            if output:
+                bar.update(round(task["bytes_transferred"] / 1000000, 2))
+                sleep(.5)
 
         else:
-            bar.finish()
-            print("\rTask Status: %s\n" % task["status"])
+            if output:
+                bar.finish()
+                print("\rTask Status: %s\n" % task["status"])
             exit(-1)
+
+
+def multi_transfer(tc, src_id, dest_id, src_dir, dest_dir, output):
+    data_sets = ["01", "04", "06", "08", "10", "12", "14", "16"]
+
+    if args.batch:
+        ready_transfers = []
+        submitted_data = []
+        for set in data_sets:
+            data = globus_sdk.TransferData(tc, src_id, dest_id, label="Add ds{} Batch".format(set),
+                                           sync_level=None, verify="checksum")
+            data.add_item(src_dir + "ds{}".format(set), dest_dir + "ds{}".format(set), recursive=True)
+            ready_transfers.append(data)
+            transfer_result = tc.submit_transfer(data)
+            submitted_data.append(transfer_result)
+
+    else:
+
+        for set in data_sets:
+            write_results(single_transfer_data(tc, args.src_ep_id, args.dest_ep_id, src_dir + 'ds{}'.format(set),
+                                               dest_dir + 'ds{}'.format(set), output),
+                          "{}.csv".format(test_start))
+
+        if args.write_back:
+            ddir = args.return_directory or args.src_dir
+            for set in data_sets:
+                write_results(single_transfer_data(tc, args.dest_ep_id, args.src_ep_id,
+                                                   dest_dir + 'ds{}'.format(set),
+                                                   ddir + 'ds{}'.format(set),
+                                                   output), "{}.csv".format(test_start))
+
+
+def write_results(data_dict, filename):
+    with open(filename, 'a+', newline='') as file:
+        writer = csv.writer(file)
+
+        if file.tell() == 0:
+            writer.writerow(["Dataset", "Start", "End", "Elapsed", "Speed", "Source EP ID", "Dest. EP ID", "Task ID"])
+
+        if args.batch:
+            pass
+        else:
+            writer.writerow([data_dict["dataset"],
+                             data_dict["start"],
+                             data_dict["end"],
+                             data_dict["elapsed"],
+                             data_dict["speed"],
+                             data_dict["src_ep_id"],
+                             data_dict["dest_ep_id"],
+                             data_dict["task_id"]])
+
+
+def clean():
+    if args.clean:
+        ddata = globus_sdk.DeleteData(tc, args.dest_ep_id, recursive=True,
+                                      label="Delete {}".format(args.dest_dir.split("/")[-1]))
+
+        ddata.add_item(args.dest_dir)
+        tc.submit_delete(ddata)
+
+        if args.write_back and (args.return_directory is not None):  # Ensure that data is not deleted from host.
+            ddir = args.return_directory or args.src_dir
+            ddata2 = globus_sdk.DeleteData(tc, args.src_ep_id, recursive=True,
+                                           label="Delete {}".format(args.src_dir.split("/")[-1]))
+            ddata2.add_item(ddir)
+            tc.submit_delete(ddata2)
 
 
 if __name__ == '__main__':
@@ -98,16 +184,7 @@ if __name__ == '__main__':
                                 refresh_token=args.refresh_token)
     tc = globus_sdk.TransferClient(authorizer=authorizer)
 
-    transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir)
+    test_start = datetime.now().strftime("%m-%d-%Y_%Hh%Mm%Ss")
 
-
-    # print("My Endpoints:")
-    # for ep in tc.endpoint_search(filter_scope="recently-used"):
-    #     print("[{}] {}".format(ep["id"], ep["display_name"]))
-    #
-    # print("\n")
-    # for task in tc.task_list():
-    #     print("Task({}): {} -> {}".format(
-    #         task["task_id"], task["source_endpoint"],
-    #         task["destination_endpoint"]))
-
+    multi_transfer(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True)
+    clean()
