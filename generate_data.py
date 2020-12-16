@@ -23,6 +23,8 @@ def get_args():
                              'specified return directory using [-r].')
     parser.add_argument('-c', dest='clean', action='store_true',
                         help='Use to delete/clean the transferred files post transfer.')
+    parser.add_argument('-b', dest='batch', action='store_true',
+                        help='Run all transfers at the same time rather than individually.')
 
     return parser.parse_args()
 
@@ -67,11 +69,10 @@ def get_authorizer(client_id, **kwargs):
             transfer_rt, client, access_token=transfer_at, expires_at=expires_at_s)
 
 
-def transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
-
+def single_transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
     tdata = globus_sdk.TransferData(tc, src_id,
-                                     dest_id,
-                                     label="Add {}".format(src_dir.split("/")[-1]),
+                                    dest_id,
+                                    label="Add {}".format(src_dir.split("/")[-1]),
                                     sync_level=None, verify="checksum")
 
     tdata.add_item(src_dir, dest_dir, recursive=True)
@@ -89,14 +90,14 @@ def transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
             if output:
                 bar.finish()
                 print("Task Status: " + task["status"])
-                print("Effective Speed: " + str(round(task["effective_bytes_per_second"]/(1024*1024), 2)) + " MB/s")
+                print("Effective Speed: " + str(round(task["effective_bytes_per_second"] / (1024 * 1024), 2)) + " MB/s")
 
             return {"dataset": src_dir.split("/")[-1],
                     "start": task["request_time"],
                     "end": task["completion_time"],
                     # Todo: Make it so that the elapsed time can be created outside of the progress bar context.
                     "elapsed": str(bar.data()['time_elapsed']),
-                    "speed": str(round(task["effective_bytes_per_second"]/(1024*1024), 2)),
+                    "speed": str(round(task["effective_bytes_per_second"] / (1024 * 1024), 2)),
                     "src_ep_id": src_id,
                     "dest_ep_id": dest_id,
                     "task_id": transfer_result["task_id"]}
@@ -104,7 +105,7 @@ def transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
         elif task["status"] == "ACTIVE":
             if output:
                 # Todo: Add 'MB' to the end of progress bar output
-                bar.update(round(task["bytes_transferred"]/1000000, 2))
+                bar.update(round(task["bytes_transferred"] / 1000000, 2))
                 sleep(.5)
 
         else:
@@ -114,6 +115,35 @@ def transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
             exit(-1)
 
 
+def multi_transfer(tc, src_id, dest_id, src_dir, dest_dir, output):
+    data_sets = ["01", "04", "06", "08", "10", "12", "14", "16"]
+
+    if args.batch:
+        ready_transfers = []
+        submitted_data = []
+        for set in data_sets:
+            data = globus_sdk.TransferData(tc, src_id, dest_id, label="Add ds{} Batch".format(set),
+                                           sync_level=None, verify="checksum")
+            data.add_item(src_dir + "ds{}".format(set), dest_dir + "ds{}".format(set), recursive=True)
+            ready_transfers.append(data)
+            transfer_result = tc.submit_transfer(data)
+            submitted_data.append(transfer_result)
+
+    else:
+
+        for set in data_sets:
+            write_results(single_transfer_data(tc, args.src_ep_id, args.dest_ep_id, '/datasets/ds{}'.format(set),
+                                               '/rstore/share/TEST_TRANSFER/ds{}'.format(set), True),
+                          "{}.csv".format(test_start))
+
+        if args.write_back:
+            for set in data_sets:
+                write_results(single_transfer_data(tc, args.dest_ep_id, args.src_ep_id,
+                                                   '/rstore/share/TEST_TRANSFER/ds{}'.format(set),
+                                                   '/perftest/uab_rc/ds{}'.format(set),
+                                                   True), "{}.csv".format(test_start))
+
+
 def write_results(data_dict, filename):
     with open(filename, 'a+', newline='') as file:
         writer = csv.writer(file)
@@ -121,14 +151,33 @@ def write_results(data_dict, filename):
         if file.tell() == 0:
             writer.writerow(["Dataset", "Start", "End", "Elapsed", "Speed", "Source EP ID", "Dest. EP ID", "Task ID"])
 
-        writer.writerow([data_dict["dataset"],
-                    data_dict["start"],
-                    data_dict["end"],
-                    data_dict["elapsed"],
-                    data_dict["speed"],
-                    data_dict["src_ep_id"],
-                    data_dict["dest_ep_id"],
-                    data_dict["task_id"]])
+        if args.batch:
+            pass
+        else:
+            writer.writerow([data_dict["dataset"],
+                             data_dict["start"],
+                             data_dict["end"],
+                             data_dict["elapsed"],
+                             data_dict["speed"],
+                             data_dict["src_ep_id"],
+                             data_dict["dest_ep_id"],
+                             data_dict["task_id"]])
+
+
+def clean():
+    if args.clean:
+        ddata = globus_sdk.DeleteData(tc, args.dest_ep_id, recursive=True,
+                                      label="Delete {}".format(args.dest_dir.split("/")[-1]))
+
+        ddata.add_item(args.dest_dir)
+        tc.submit_delete(ddata)
+
+        if args.write_back:
+            ddir = args.return_directory or args.src_dir
+            ddata2 = globus_sdk.DeleteData(tc, args.src_ep_id, recursive=True,
+                                           label="Delete {}".format(args.src_dir.split("/")[-1]))
+            ddata2.add_item(ddir)
+            tc.submit_delete(ddata2)
 
 
 if __name__ == '__main__':
@@ -139,36 +188,13 @@ if __name__ == '__main__':
 
     # Todo: Make it so that the elapsed time can be created outside of the progress bar context.
 
-    data_sets = ["01", "04", "06", "08", "10", "12", "14", "16"]
     test_start = datetime.now().strftime("%m-%d-%Y_%Hh%Mm%Ss")
 
-    # write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True),
+    multi_transfer(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True)
+
+    # write_results(single_transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True),
     #               "{}.csv".format(test_start))
     # if args.write_back:
     #     wdir = args.return_directory or args.src_dir
-    #     write_results(transfer_data(tc, args.dest_ep_id, args.src_ep_id, args.dest_dir, wdir, True),
+    #     write_results(single_transfer_data(tc, args.dest_ep_id, args.src_ep_id, args.dest_dir, wdir, True),
     #                   "{}.csv".format(test_start))
-
-    for set in data_sets:
-        write_results(transfer_data(tc, args.src_ep_id, args.dest_ep_id, '/datasets/ds{}'.format(set),
-                      '/rstore/share/TEST_TRANSFER/ds{}'.format(set), True), "{}.csv".format(test_start))
-
-    if args.write_back:
-        for set in data_sets:
-            write_results(transfer_data(tc, args.dest_ep_id, args.src_ep_id,
-                                        '/rstore/share/TEST_TRANSFER/ds{}'.format(set), '/perftest/uab_rc/ds{}'.format(set),
-                                        True), "{}.csv".format(test_start))
-
-    # if args.clean:
-    #     ddata = globus_sdk.DeleteData(tc, args.dest_ep_id, recursive=True,
-    #                                   label="Delete {}".format(args.dest_dir.split("/")[-1]))
-    #
-    #     ddata.add_item(args.dest_dir)
-    #     tc.submit_delete(ddata)
-    #
-    #     if args.write_back:
-    #         ddir = args.return_directory or args.src_dir
-    #         ddata2 = globus_sdk.DeleteData(tc, args.src_ep_id, recursive=True,
-    #                                       label="Delete {}".format(args.src_dir.split("/")[-1]))
-    #         ddata2.add_item(ddir)
-    #         tc.submit_delete(ddata2)
