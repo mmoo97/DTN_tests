@@ -1,5 +1,4 @@
 import globus_sdk
-import sys
 import argparse
 from time import sleep
 import progressbar
@@ -95,7 +94,6 @@ def single_transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
             return {"dataset": src_dir.split("/")[-1],
                     "start": task["request_time"],
                     "end": task["completion_time"],
-                    # Todo: Make it so that the elapsed time can be created outside of the progress bar context.
                     "elapsed": str(bar.data()['time_elapsed']),
                     "speed": str(round(task["effective_bytes_per_second"] / (1024 * 1024), 2)),
                     "src_ep_id": src_id,
@@ -104,7 +102,6 @@ def single_transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
 
         elif task["status"] == "ACTIVE":
             if output:
-                # Todo: Add 'MB' to the end of progress bar output
                 bar.update(round(task["bytes_transferred"] / 1000000, 2))
                 sleep(.5)
 
@@ -115,7 +112,7 @@ def single_transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
             exit(-1)
 
 
-def multi_transfer(tc, src_id, dest_id, src_dir, dest_dir, output, ret_dir):
+def multi_transfer(tc, src_id, dest_id, src_dir, dest_dir, output):
     data_sets = ["01", "04", "06", "08", "10", "12", "14", "16"]
 
     if args.batch:
@@ -137,12 +134,11 @@ def multi_transfer(tc, src_id, dest_id, src_dir, dest_dir, output, ret_dir):
                           "{}.csv".format(test_start))
 
         if args.write_back:
-            if ret_dir is not None:
-                src_dir = ret_dir
+            ddir = args.return_directory or args.src_dir
             for set in data_sets:
                 write_results(single_transfer_data(tc, args.dest_ep_id, args.src_ep_id,
                                                    dest_dir + 'ds{}'.format(set),
-                                                   src_dir + 'ds{}'.format(set),
+                                                   ddir + 'ds{}'.format(set),
                                                    output), "{}.csv".format(test_start))
 
 
@@ -174,7 +170,7 @@ def clean():
         ddata.add_item(args.dest_dir)
         tc.submit_delete(ddata)
 
-        if args.write_back:
+        if args.write_back and (args.return_directory is not None):  # Ensure that data is not deleted from host.
             ddir = args.return_directory or args.src_dir
             ddata2 = globus_sdk.DeleteData(tc, args.src_ep_id, recursive=True,
                                            label="Delete {}".format(args.src_dir.split("/")[-1]))
@@ -190,22 +186,5 @@ if __name__ == '__main__':
 
     test_start = datetime.now().strftime("%m-%d-%Y_%Hh%Mm%Ss")
 
-    off_campus = '7167cb38-9f78-11e6-b0dd-22000b92c261'
-
-    multi_transfer(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True, "/perftest/uab_rc/")
-    multi_transfer(tc, 'e261ffb8-6d04-11e5-ba46-22000b92c6ec', args.dest_ep_id, args.src_dir, args.dest_dir, True,
-                   "/perftest/uab_rc/")  # argonne
-    multi_transfer(tc, '924a32b0-6a2a-11e6-83a8-22000b97daec', args.dest_ep_id, '/globus/datasets/', args.dest_dir,
-                   True, '/globus/perftest/uab_rc/')  # pamela
-
-    multi_transfer(tc, args.src_ep_id, off_campus, args.src_dir, args.dest_dir, True, "/perftest/uab_rc/")
-    multi_transfer(tc, 'e261ffb8-6d04-11e5-ba46-22000b92c6ec', off_campus, args.src_dir, args.dest_dir, True,
-                   "/perftest/uab_rc/")  # argonne
-    multi_transfer(tc, '924a32b0-6a2a-11e6-83a8-22000b97daec', off_campus, '/globus/datasets/', args.dest_dir,
-                   True, '/globus/perftest/uab_rc/')  # pamela
-    # write_results(single_transfer_data(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True),
-    #               "{}.csv".format(test_start))
-    # if args.write_back:
-    #     wdir = args.return_directory or args.src_dir
-    #     write_results(single_transfer_data(tc, args.dest_ep_id, args.src_ep_id, args.dest_dir, wdir, True),
-    #                   "{}.csv".format(test_start))
+    multi_transfer(tc, args.src_ep_id, args.dest_ep_id, args.src_dir, args.dest_dir, True)
+    clean()
