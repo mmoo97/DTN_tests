@@ -7,6 +7,13 @@ from datetime import datetime
 
 
 def get_args():
+    """
+    Command line parsing function that leverages the argparse library. Call use cases via "python generate_data.py -h"
+    or "python generate_data.py --help".
+
+    @return: An argparse object that contains all of the aruguments provided based on the paramenters below.
+
+    """
     parser = argparse.ArgumentParser(description='Capture Globus transfer speeds between two endpoints.')
     parser.add_argument('client', type=str, help='The Client ID of the account testing the transfers')
     parser.add_argument('src_ep_id', type=str, help='The Endpoint ID of the source endpoint.')
@@ -29,7 +36,14 @@ def get_args():
 
 
 def get_authorizer(client_id, **kwargs):
-    """Code to gt access token"""
+    """
+    Function that takes in a Globus App Client ID and returns either a Globus AccessTokenAuthorizer or
+    RefreshTokenAuthorizer Object.
+
+    @param client_id: (string) Globus App Client ID.
+    @param kwargs: refresh_token=(string) Refresh token delivered by the command line/the Globus Api.
+    @return:
+    """
     client = globus_sdk.NativeAppAuthClient(client_id)
     refresh_token = kwargs.get('refresh_token')
     token_response = None
@@ -50,7 +64,7 @@ def get_authorizer(client_id, **kwargs):
         transfer_token = globus_transfer_data['access_token']
         print("\nTo avoid browser-based token authentication in the future, consider"
               " using the refresh token below by invoking the [-r] flag upon program initiation.")
-        print("\tRefresh token:\t" + globus_transfer_data['refresh_token'] + "\n")
+        print("\tRefresh token:\t" + globus_transfer_data['refresh_token'] + "\n")  #Refresh Token for later use
 
         return globus_sdk.AccessTokenAuthorizer(transfer_token)
 
@@ -69,6 +83,18 @@ def get_authorizer(client_id, **kwargs):
 
 
 def single_transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
+    """
+    Will initiate the transfer of a single dataset and show the progress in the console.
+
+    @param tc: (globus_sdk.transfer.client.TransferClient) Client to conduct the transfer.
+    @param src_id: (string) Globus endpoint id of the Source endpoint.
+    @param dest_id: (string) Globus endpoint id of the Destination endpoint.
+    @param src_dir: (string) Source directory where the datasets are contained and originating from.
+    @param dest_dir: (string) Destination directory where the datasets are contained and being returned to.
+    @param output: (boolean) Whether or not to show output of transfers. (CURRENTLY DEFAULTED TO TRUE)
+
+    @return: (dictionary) Object that contains transfer details and results.
+    """
     tdata = globus_sdk.TransferData(tc, src_id,
                                     dest_id,
                                     label="Add {}".format(src_dir.split("/")[-1]),
@@ -113,6 +139,18 @@ def single_transfer_data(tc, src_id, dest_id, src_dir, dest_dir, output):
 
 
 def multi_transfer(tc, src_id, dest_id, src_dir, dest_dir, output):
+    """
+    Will initiate the transfer of a multiple datasets (ds01-ds16) and show the progress in the console. Will submit all
+    transfers as a batch given the "-b" flag in the console.
+    @param tc: (globus_sdk.transfer.client.TransferClient) Client to conduct the transfer.
+    @param src_id: (string) Globus endpoint id of the Source endpoint.
+    @param dest_id: (string) Globus endpoint id of the Destination endpoint.
+    @param src_dir: (string) Source directory where the datasets are contained and originating from.
+    @param dest_dir: (string) Destination directory where the datasets are contained and being returned to.
+    @param output: (boolean) Whether or not to show output of transfers. (CURRENTLY DEFAULTED TO TRUE)
+
+    @return: (dictionary) Object that contains transfer details and results.
+    """
     data_sets = ["01", "04", "06", "08", "10", "12", "14", "16"]
 
     if args.batch:
@@ -143,6 +181,12 @@ def multi_transfer(tc, src_id, dest_id, src_dir, dest_dir, output):
 
 
 def write_results(data_dict, filename):
+    """
+    Takes a single output dictionary and writes the results to a .csv file.
+    @param data_dict: (dictionary) Data to write to the .csv file.
+    @param filename: (string) Filename of the .csv file to write to.
+    @return: Outputs .csv file.
+    """
     with open(filename, 'a+', newline='') as file:
         writer = csv.writer(file)
 
@@ -163,6 +207,10 @@ def write_results(data_dict, filename):
 
 
 def clean():
+    """
+    Deletes the written data from the endpoints.
+    @return: None
+    """
     if args.clean:
         ddata = globus_sdk.DeleteData(tc, args.dest_ep_id, recursive=True,
                                       label="Delete {}".format(args.dest_dir.split("/")[-1]))
